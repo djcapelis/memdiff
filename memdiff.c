@@ -21,7 +21,7 @@
 #include "djc_defines.h"
 
 /* memdiff defines */
-#define BUFFER_SIZE 4096  /* Must align with system page size */
+#define NAMELEN 256       /* Length of max file name */ 
 
 /* Functions */
 void print_usage();
@@ -74,6 +74,11 @@ int main(int argc, char * argv[])
     char * src0 = NULL;
     char * src1 = NULL;
     char * dest = NULL;
+
+    /* Filename rewrite pointers */
+    char * src0rw = NULL;
+    char * src1rw = NULL;
+    char * destrw = NULL;
 
     /* Argument parsing */
     char opt;
@@ -216,7 +221,24 @@ int main(int argc, char * argv[])
             err_msg("Snapshot path is not a directory\n");
     }
 
+    /* Allocate memory for filenames and initialize them */
+    src0 = calloc(1, srcdirlen + NAMELEN);
+    src1 = calloc(1, srcdirlen + NAMELEN);
+    dest = calloc(1, destdirlen + NAMELEN);
+    strncpy(src0, srcdir, srcdirlen);
+    strncpy(src1, srcdir, srcdirlen);
+    strncpy(dest, destdir, destdirlen);
+    src0rw = src0 + srcdirlen - 1;
+    src1rw = src1 + srcdirlen - 1;
+    destrw = dest + destdirlen - 1;
+    snprintf(src1rw, NAMELEN, "%s%d%s%d%s%d", "/pid", pid, "_snap", startsnap, "_seg", 0);
+
     /* Begin main routine */
+    for(int cursnap = startsnap; cursnap < termsnap; cursnap++)
+    {
+        if(!OPT_Q)
+            printf("Diffing snapshot %d and %d\n", cursnap, cursnap + 1);
+    }
 
     goto cleanup_and_term;
 
