@@ -152,11 +152,9 @@ int main(int argc, char * argv[])
                 arg = strtol(optarg, &strerr, 10);
                 if(arg > INT_MAX || arg < 0 || strerr[0] != 0)
                     err_msg("Unable to parse -b argument correctly, should be number of bytes\n");
-                blocksize = 1;
-                while(blocksize < arg)
-                    blocksize *= 2;
-                if(blocksize != arg)
+                if((((arg - 1) & arg) != 0) || arg <= 0) /* If blocksize is not a positive, non-zero power of two */
                     err_msg("Unable to parse -b argument correctly.  Must be power of two.\n");
+                blocksize = arg;
                 optarg = NULL;
                 break;
             /* Blocksize in kilobytes */
