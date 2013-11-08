@@ -163,12 +163,9 @@ int main(int argc, char * argv[])
                 arg = strtol(optarg, &strerr, 10);
                 if((arg * 1024) > INT_MAX || arg < 0 || strerr[0] != 0)
                     err_msg("Unable to parse -k argument correctly, should be number of kilobytes\n");
-                blocksize = 1;
-                while(blocksize < arg)
-                    blocksize *= 2;
-                if(blocksize != arg)
+                if((((arg - 1) & arg) != 0) || (arg * 1024) <= 0) /* If blocksize is not a positive, non-zero power of two */
                     err_msg("Unable to parse -k argument correctly.  Must be power of two.\n");
-                blocksize *= 1024;
+                blocksize = arg * 1024;
                 optarg = NULL;
                 break;
             /* Set a flag to lessen the omit the routine output messages */
