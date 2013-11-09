@@ -13,9 +13,11 @@
 #include<errno.h>
 #include<string.h>
 #include<limits.h>
+#include<fcntl.h>
 
 /* Includes from /sys */
 #include<sys/stat.h>
+#include<sys/mman.h>
 
 /* Local project includes */
 #include "djc_defines.h"
@@ -60,10 +62,12 @@ int main(int argc, char * argv[])
     bool exit_error = false;    /* Used for error/exit handling */
     int startsnap = 1;          /* Current snapshot number */
     int termsnap;               /* Snapshot number we should end on, specified by option -f */
+    int cursnap;                /* Current snapshot */
+    int region;                 /* Region number */
+    int curregion;              /* Current region */
     int destdirlen;             /* Keeps track of the length of the destination directory */
     int srcdirlen;              /* Keeps track of the length of the source directory */
     int pid;                    /* pid to snapshot */
-    int region;                 /* region number */
     int blocksize = 4096;       /* diff blocksize */
 
     /* Things that need to be in scope to get cleaned up by error/exit handlers */
@@ -80,11 +84,23 @@ int main(int argc, char * argv[])
     char * src1rw = NULL;
     char * destrw = NULL;
 
+    /* File descriptors */
+    int src0fd = 0;
+    int src1fd = 0;
+    int destfd = 0;
+
+    /* Higher level file interfaces */
+    off_t src0size = 0;
+    off_t src1size = 0;
+    void * map0 = NULL;
+    void * map1 = NULL;
+    FILE * destfile = NULL;
+
     /* Argument parsing */
     char opt;
     char * strerr = NULL;
     long arg;
-    struct stat dirstat;
+    struct stat statchk;
     int chk;
     while((opt = getopt(argc, argv, "+hs:f:p:r:b:k:d:q")) != -1)
     {
@@ -98,7 +114,7 @@ int main(int argc, char * argv[])
                 OPT_D = true;
                 destdir = optarg;
                 destdirlen = strlen(optarg);
-                chk = stat(destdir, &dirstat);
+                chk = stat(destdir, &statchk);
                 if(chk == -1 && errno == ENOENT)
                     err_msg("Invalid path specified by -d option\n");
                 else if(chk == -1)
@@ -106,7 +122,7 @@ int main(int argc, char * argv[])
                     perror("Error parsing -d argument:"); /* Undefined error, handle using perror() */
                     exit(EXIT_FAILURE);
                 }
-                if(!S_ISDIR(dirstat.st_mode))
+                if(!S_ISDIR(statchk.st_mode))
                     err_msg("Path specified by -d is not a directory\n");
                 optarg = NULL;
                 break;
@@ -184,13 +200,6 @@ int main(int argc, char * argv[])
         err_msg("Options -s, -f and -p are all required in this release\n");
     if(startsnap >= termsnap)
         err_msg("The starting snapshot is not before the final snapshot.\n");
-    if(!OPT_D) /* Set default destdir to current directory if none is specified */
-    {
-        destdirlen = 2; /* extra room because it's, just shush */
-        destdir = calloc(1, 2);
-        destdir[0] = '.';
-        destdir[1] = '\0';
-    }
     if(argc <= optind)
     {
         if(!OPT_Q)
@@ -204,7 +213,7 @@ int main(int argc, char * argv[])
     {
         srcdirlen = strlen(argv[optind]);
         srcdir = argv[optind];
-        chk = stat(srcdir, &dirstat);
+        chk = stat(srcdir, &statchk);
         if(chk == -1 && errno == ENOENT)
             err_msg("Invalid snapshot path\n");
         else if(chk == -1)
@@ -212,11 +221,16 @@ int main(int argc, char * argv[])
             perror("Error parsing snapshot path:"); /* Undefined error, handle using perror() */
             exit(EXIT_FAILURE);
         }
-        if(!S_ISDIR(dirstat.st_mode))
+        if(!S_ISDIR(statchk.st_mode))
             err_msg("Snapshot path is not a directory\n");
     }
+    if(!OPT_D) /* If no destdir specifed, use source directory */
+    {
+        destdir = srcdir;
+        destdirlen = srcdirlen;
+    }
 
-    /* Allocate memory for filenames and initialize them */
+    /* Allocate memory for filenames */
     src0 = calloc(1, srcdirlen + NAMELEN);
     src1 = calloc(1, srcdirlen + NAMELEN);
     dest = calloc(1, destdirlen + NAMELEN);
@@ -226,13 +240,136 @@ int main(int argc, char * argv[])
     src0rw = src0 + srcdirlen - 1;
     src1rw = src1 + srcdirlen - 1;
     destrw = dest + destdirlen - 1;
-    snprintf(src1rw, NAMELEN, "%s%d%s%d%s%d", "/pid", pid, "_snap", startsnap, "_seg", 0);
+
+    /* Check for valid beginning and end snapshots */
+    if(OPT_R)
+    {
+        snprintf(src0rw, NAMELEN, "%s%d%s%d%s%d", "/pid", pid, "_snap", startsnap, "_seg", region);
+        snprintf(src1rw, NAMELEN, "%s%d%s%d%s%d", "/pid", pid, "_snap", termsnap, "_seg", region);
+    }
+    else
+    {
+        snprintf(src0rw, NAMELEN, "%s%d%s%d%s%d", "/pid", pid, "_snap", startsnap, "_seg", 0);
+        snprintf(src1rw, NAMELEN, "%s%d%s%d%s%d", "/pid", pid, "_snap", termsnap, "_seg", 0);
+    }
+
+    chk = stat(src0, &statchk);
+    if(chk == -1 && errno==ENOENT)
+    {
+        fprintf(stderr, "Can't find first snapshot %s\n", src0);
+        exit(EXIT_FAILURE);
+    }
+    else if(chk == -1)
+    {
+        perror("Error accessing snapshot:"); /*Undefined error */
+        exit(EXIT_FAILURE);
+    }
+
+    chk = stat(src1, &statchk);
+    if(chk == -1 && errno==ENOENT)
+    {
+        fprintf(stderr, "Can't find last snapshot %s\n", src1);
+        exit(EXIT_FAILURE);
+    }
+    else if(chk == -1)
+    {
+        perror("Error accessing snapshot:"); /*Undefined error */
+        exit(EXIT_FAILURE);
+    }
 
     /* Begin main routine */
-    for(int cursnap = startsnap; cursnap < termsnap; cursnap++)
+    for(cursnap = startsnap; cursnap < termsnap; cursnap++)
     {
         if(!OPT_Q)
             printf("Diffing snapshot %d and %d\n", cursnap, cursnap + 1);
+        curregion = 0;
+        while(1) /* Iterate through all regions */
+        {
+            if(OPT_R)
+                curregion = region;
+
+            /* Initialize filenames */
+            if(OPT_R)
+            {
+                snprintf(src0rw, NAMELEN, "%s%d%s%d%s%d", "/pid", pid, "_snap", cursnap, "_seg", region);
+                snprintf(src1rw, NAMELEN, "%s%d%s%d%s%d", "/pid", pid, "_snap", cursnap + 1, "_seg", region);
+                snprintf(destrw, NAMELEN, "%s%d%s%d%s%d%s%d", "/diff:pid", pid, "_snap", cursnap, "_snap", cursnap + 1 , "_seg", region);
+            }
+            else
+            {
+                snprintf(src0rw, NAMELEN, "%s%d%s%d%s%d", "/pid", pid, "_snap", cursnap, "_seg", curregion);
+                snprintf(src1rw, NAMELEN, "%s%d%s%d%s%d", "/pid", pid, "_snap", cursnap + 1, "_seg", curregion);
+                snprintf(destrw, NAMELEN, "%s%d%s%d%s%d%s%d", "/diff:pid", pid, "_snap", cursnap, "_snap", cursnap + 1 , "_seg", curregion);
+            }
+
+            /* Open and check for errors */
+            src0fd = open(src0, O_RDONLY);
+            if(src0fd == -1 && errno == ENOENT)
+                break; /* region doesn't exist, go to next snap */
+            else if(src0fd == -1)
+                cust_error(src0);
+
+            src1fd = open(src1, O_RDONLY);
+            if(src1fd == -1 && errno != ENOENT) /* If the file doesn't exist, we'll handle that later */
+                cust_error(src1);
+
+            destfd = open(dest, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
+            if(destfd == -1 && errno == EEXIST)
+            {
+                fprintf(stderr, "File %s already exists, aborting.\n", dest);
+                exit_error = true;
+                goto cleanup_and_term;
+            }
+            else if(destfd == -1)
+                cust_error(dest);
+
+            /* Higher layer bullshit */
+            err_chk(stat(src0, &statchk) == -1);
+            src0size = statchk.st_size;
+            if(src1fd != -1)
+            {
+                err_chk(stat(src1, &statchk) == -1);
+                src1size = statchk.st_size;
+            }
+            else
+                src1size = 0;
+
+            /* Memory maps for src0 and src1 */
+            map0 = mmap(NULL, src0size, PROT_READ, MAP_PRIVATE, src0fd, 0);
+            err_chk(map0 == MAP_FAILED);
+            if(src1fd != -1)
+            {
+                map1 = mmap(NULL, src1size, PROT_READ, MAP_PRIVATE, src1fd, 0);
+                err_chk(map1 == MAP_FAILED);
+            }
+
+            /* Stream interface for destfile */
+            destfile = fdopen(destfd, "w");
+            if(destfile == NULL)
+                cust_error(dest);
+
+
+
+
+
+
+            /* Clean up */
+            munmap(map0, src0size);
+            map0 = NULL;
+            munmap(map1, src1size);
+            map1 = NULL;
+            close(src0fd);
+            src0fd = 0;
+            close(src1fd);
+            src1fd = 0;
+            fclose(destfile);
+            destfile = NULL;
+
+            if(OPT_R)
+                break;
+            else
+                curregion++;
+        }
     }
 
     goto cleanup_and_term;
@@ -247,14 +384,24 @@ err:
 cleanup_and_term:
 
 /* Cleanup */
-    if(!OPT_D)
+    if(OPT_D)
         free(destdir);
     if(src0)
         free(src0);
     if(src1)
         free(src1);
-    if(dest)
+    if(dest && OPT_D)
         free(dest);
+    if(destfile != NULL)
+        fclose(destfile);
+    if(map0 != NULL && map0 != MAP_FAILED)
+        munmap(map0, src0size);
+    if(map1 != NULL && map1 != MAP_FAILED)
+        munmap(map1, src1size);
+    if(src0fd > 0)
+        close(src0fd);
+    if(src0fd > 0)
+        close(src1fd);
 
 /* Exit */
     if(exit_error == true)
