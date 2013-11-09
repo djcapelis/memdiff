@@ -348,9 +348,36 @@ int main(int argc, char * argv[])
             if(destfile == NULL)
                 cust_error(dest);
 
-
-
-
+            /* Differencing the memory */
+            int curblock = 0;
+            while(curblock * blocksize < src0size)
+            {
+                char write = '\0';
+                for(int i = 0; i < 8; ++i)
+                {
+                    if(curblock * blocksize >= src0size) /* If we're done */
+                    {
+                        write = write << (8 - i);
+                        ++curblock;
+                        break;
+                    }
+                    if((curblock + 1) * blocksize > src0size)
+                    {
+                        if(memcmp(map0 + (curblock * blocksize), map1 + (curblock * blocksize), src0size % blocksize))
+                            write = (write << 1) + 1;
+                        else
+                            write = write << 1;
+                    }
+                    else if((curblock + 1) * blocksize > src1size)
+                        write = (write << 1) + 1;
+                    else if(memcmp(map0 + (curblock * blocksize), map1 + (curblock * blocksize), blocksize))
+                        write = (write << 1) + 1;
+                    else
+                        write = write << 1;
+                    ++curblock;
+                }
+                err_chk(fwrite(&write, 1, 1, destfile) != 1)
+            }
 
 
             /* Clean up */
