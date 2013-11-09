@@ -92,8 +92,8 @@ int main(int argc, char * argv[])
     /* Higher level file interfaces */
     off_t src0size = 0;
     off_t src1size = 0;
-    void * map0 = NULL;
-    void * map1 = NULL;
+    char * map0 = NULL;
+    char * map1 = NULL;
     FILE * destfile = NULL;
 
     /* Argument parsing */
