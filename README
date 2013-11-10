@@ -1,0 +1,35 @@
+Memdiff is a memory snapshot analysis tool.  It takes snapshots as formatted and named by memsnap (https://github.com/djcapelis/memsnap) and examines them for differences.  It can operate in blocks of various sizes and can do analysis on snapshots produced by memsnap on a much broader range of platforms than memsnap runs, including Linux, OS X and some other POSIX-like operating systems. 
+
+Memdiff is a focused and specific analysis tool currently in an early state of development, is not yet feature complete, may or may not ever be future complete and may not even produce corrrect results in all cases.  Please use it at your own discretion.
+
+Memdiff in its own words:
+$ ./memdiff -h
+Usage: memdiff -s <startsnap> -f <finalsnap> -p <pid> [options] [snapshot path]
+    -h Print usage
+    -s <num> Start at snapshot <num>
+    -f <num> Finish at snapshot <num>
+    -p <pid> Look for snapshots from pid <pid>
+    -r <num> Only examine region <num>
+    -b <size> Take differences in blocks <size> bytes
+    -k <size> Take differences in blocks <size> kilobytes
+    -q Be quiet, do not output anything but errors
+    -d <dir> Specify destination directory for diffs
+
+Currently, -s, -f and -p are all required.  Future versions of memdiff may examine the filesystem to determine the beginning and ending of the captured snapshot ranges and may eliminate this limitation by choosing the earliest and latest snapshots by default.  By default, memdiff creates diffs against all regions it can find, in 4kb blocks, in the same directory as the snapshot path.
+
+Limitations:
+* Memdiff does not have any flexibility on input filenames and expect them exactly as produced by memsnap.
+* Memdiff does not word with snapshots produced by memsnap's -g or its undocumented -c or -S options.  (Though it can do snapshots produced via the -g and -c options anyway if you rename them as if they were all _seg0.  It should probably not be used on snapshots produced by the undocumented -S option.)
+* Memdiff offers you no options on the format of file names that it outputs.
+* Memdiff refuse to overwrite files.  If it opens a file to output data and that file name already exists, memdiff will exit with an error.
+* All diff block sizes must be a power of two.
+
+Bugs:
+* Memdiff relies on region numbers to determine which memory segements should be differenced against each other.  Regions which change and do not map to the same region number from one snapshot to the next will not be differenced against each other.
+* Memdiff is not well tested in its current state and may have bugs and/or errant results given incorrect inputs.
+
+Future:
+* Be smarter about detecting snapshots and beginning/ending points using filesystem information.
+* Eliminate many current bugs and limitations.
+* More choice in differencing algorithms.
+* Add a force (-F) option to overwrite files.
