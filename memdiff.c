@@ -308,13 +308,15 @@ int main(int argc, char * argv[])
 
             /* Open and check for errors */
             src0fd = open(src0, O_RDONLY);
-            if(src0fd == -1 && errno == ENOENT)
-                break; /* region doesn't exist, go to next snap */
+            if(src0fd == -1 && errno == ENOENT)     /* If there's no next region in the snapshot, go to the next snapshot.  This behavior   */
+                break;                              /* isn't entirely optimal and will fail to find regions beyond the first missing region */
             else if(src0fd == -1)
                 cust_error(src0);
 
             src1fd = open(src1, O_RDONLY);
-            if(src1fd == -1 && errno != ENOENT) /* If the file doesn't exist, we'll handle that later */
+            if(src1fd == -1 && errno == ENOENT)     /* If there's no corresponding region in the next snapshot, don't diff, instead */
+                continue;                           /* try the next region, which should fail, but might not if things are weird.   */
+            else if(src1fd == -1 && errno != ENOENT)
                 cust_error(src1);
 
             destfd = open(dest, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
@@ -330,22 +332,14 @@ int main(int argc, char * argv[])
             /* Higher layer bullshit */
             err_chk(stat(src0, &statchk) == -1);
             src0size = statchk.st_size;
-            if(src1fd != -1)
-            {
-                err_chk(stat(src1, &statchk) == -1);
-                src1size = statchk.st_size;
-            }
-            else
-                src1size = 0;
+            err_chk(stat(src1, &statchk) == -1);
+            src1size = statchk.st_size;
 
             /* Memory maps for src0 and src1 */
             map0 = mmap(NULL, src0size, PROT_READ, MAP_PRIVATE, src0fd, 0);
             err_chk(map0 == MAP_FAILED);
-            if(src1fd != -1)
-            {
-                map1 = mmap(NULL, src1size, PROT_READ, MAP_PRIVATE, src1fd, 0);
-                err_chk(map1 == MAP_FAILED);
-            }
+            map1 = mmap(NULL, src1size, PROT_READ, MAP_PRIVATE, src1fd, 0);
+            err_chk(map1 == MAP_FAILED);
 
             /* Stream interface for destfile */
             destfile = fdopen(destfd, "w");
@@ -365,16 +359,16 @@ int main(int argc, char * argv[])
                         ++curblock;
                         break;
                     }
-                    if((curblock + 1) * blocksize > src0size)
+                    if((curblock + 1) * blocksize > src0size) /* If we're almost done */
                     {
                         if(memcmp(map0 + (curblock * blocksize), map1 + (curblock * blocksize), src0size % blocksize))
                             write = (write << 1) + 1;
                         else
                             write = write << 1;
                     }
-                    else if((curblock + 1) * blocksize > src1size)
+                    else if((curblock + 1) * blocksize > src1size) /* If src0 is larger than src1 */
                         write = (write << 1) + 1;
-                    else if(memcmp(map0 + (curblock * blocksize), map1 + (curblock * blocksize), blocksize))
+                    else if(memcmp(map0 + (curblock * blocksize), map1 + (curblock * blocksize), blocksize)) /* normal case */
                         write = (write << 1) + 1;
                     else
                         write = write << 1;
@@ -396,6 +390,7 @@ int main(int argc, char * argv[])
             fclose(destfile);
             destfile = NULL;
 
+            /* Check whether or not we should go to the next region */
             if(OPT_R)
                 break;
             else
