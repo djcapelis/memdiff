@@ -27,6 +27,7 @@ Limitations:
 Bugs:
 * Memdiff relies on region numbers to determine which memory segements should be differenced against each other.  Regions which change and do not map to the same region number from one snapshot to the next will not be differenced against each other.
 * Memdiff is not well tested in its current state and may have bugs and/or errant results given incorrect inputs.
+* Memdiff does not read the _regions output file from memsnap and therefore is blind to some types of dynamic changes in regions over the runtime of the program during its snapshotting.  This metadata is valuable and could totally allow memdiff to do this correctly.  Perhaps a future version will make use of it.
 
 Future:
 * Be smarter about detecting snapshots and beginning/ending points using filesystem information.
