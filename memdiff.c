@@ -92,16 +92,16 @@ int main(int argc, char * argv[])
     /* Higher level file interfaces */
     off_t src0size = 0;
     off_t src1size = 0;
-    char * map0 = NULL;
-    char * map1 = NULL;
-    FILE * destfile = NULL;
+    char * map0 = NULL;         /* For mmap() on src0*/
+    char * map1 = NULL;         /* For mmap() on src1 */
+    FILE * destfile = NULL;     /* For the buffered streaming C standard lib file I/O interface for output files */
 
     /* Argument parsing */
-    char opt;
-    char * strerr = NULL;
-    long arg;
-    struct stat statchk;
-    int chk;
+    char opt;                   /* Opt for getopt() */
+    char * strerr = NULL;       /* As per getopt() */
+    long arg;                   /* Store argument input */
+    struct stat statchk;        /* A stat struct to hold data from stat() in checks */
+    int chk;                    /* A variable to hold return values for error checks */
     while((opt = getopt(argc, argv, "+hs:f:p:r:b:k:d:q")) != -1)
     {
         switch(opt)
@@ -200,7 +200,7 @@ int main(int argc, char * argv[])
         err_msg("Options -s, -f and -p are all required in this release\n");
     if(startsnap >= termsnap)
         err_msg("The starting snapshot is not before the final snapshot.\n");
-    if(argc <= optind)
+    if(argc <= optind) /* If there's no additional arguments... */
     {
         if(!OPT_Q)
             printf("%s\n", "No path to snapshots, searching current directory.");
@@ -230,7 +230,7 @@ int main(int argc, char * argv[])
         destdirlen = srcdirlen;
     }
 
-    /* Allocate memory for filenames */
+    /* Allocate memory for filenames and initialize related variables */
     src0 = calloc(1, srcdirlen + NAMELEN);
     src1 = calloc(1, srcdirlen + NAMELEN);
     dest = calloc(1, destdirlen + NAMELEN);
@@ -253,6 +253,7 @@ int main(int argc, char * argv[])
         snprintf(src1rw, NAMELEN, "%s%d%s%d%s%d", "/pid", pid, "_snap", termsnap, "_seg", 0);
     }
 
+    /* Check for first snapshot */
     chk = stat(src0, &statchk);
     if(chk == -1 && errno==ENOENT)
     {
@@ -261,10 +262,11 @@ int main(int argc, char * argv[])
     }
     else if(chk == -1)
     {
-        perror("Error accessing snapshot:"); /*Undefined error */
+        perror("Error accessing snapshot:"); /* Undefined error */
         exit(EXIT_FAILURE);
     }
 
+    /* Check for last snapshot */
     chk = stat(src1, &statchk);
     if(chk == -1 && errno==ENOENT)
     {
@@ -273,9 +275,11 @@ int main(int argc, char * argv[])
     }
     else if(chk == -1)
     {
-        perror("Error accessing snapshot:"); /*Undefined error */
+        perror("Error accessing snapshot:"); /* Undefined error */
         exit(EXIT_FAILURE);
     }
+
+    /* We don't check for the middle ones because we assume they're probably there, if not, we'll error later */
 
     /* Begin main routine */
     for(cursnap = startsnap; cursnap < termsnap; cursnap++)
