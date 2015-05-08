@@ -316,7 +316,10 @@ int main(int argc, char * argv[])
 
             src1fd = open(src1, O_RDONLY);
             if(src1fd == -1 && errno == ENOENT)     /* If there's no corresponding region in the next snapshot, don't diff, instead */
-                continue;                           /* try the next region, which should fail, but might not if things are weird.   */
+            {                                       /* try the next region, which should fail, but might not if things are weird.   */
+                close(src0fd);
+                continue;
+            }
             else if(src1fd == -1 && errno != ENOENT)
                 cust_error(src1);
 
