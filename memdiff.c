@@ -286,7 +286,7 @@ int main(int argc, char * argv[])
     for(cursnap = startsnap; cursnap < termsnap; cursnap++)
     {
         if(!OPT_Q)
-            printf("Diffing snapshot %d and %d\n", cursnap, cursnap + 1);
+            printf("Diffing snapshots %d and %d, segs:", cursnap, cursnap + 1);
         curregion = 0;
         while(1) /* Iterate through all regions */
         {
@@ -354,6 +354,9 @@ int main(int argc, char * argv[])
             if(destfile == NULL)
                 cust_error(dest);
 
+            printf(" %d", curregion);
+            fflush(stdout);
+
             /* Differencing the memory */
             int curblock = 0;
             while(curblock * blocksize < src0size)
@@ -404,6 +407,7 @@ skiptonextcleanupfds:
             else
                 curregion++;
         }
+        printf("\n");
     }
 
     goto cleanup_and_term;
