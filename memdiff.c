@@ -336,6 +336,10 @@ int main(int argc, char * argv[])
             err_chk(stat(src1, &statchk) == -1);
             src1size = statchk.st_size;
 
+            /* If either file is zeros, don't diff.  Potentially should be handled better. */
+            if(src0size == 0 || src1size == 0)
+                goto skiptonextcleanupfds;
+
             /* Memory maps for src0 and src1 */
             map0 = mmap(NULL, src0size, PROT_READ, MAP_PRIVATE, src0fd, 0);
             err_chk(map0 == MAP_FAILED);
@@ -378,18 +382,18 @@ int main(int argc, char * argv[])
                 err_chk(fwrite(&write, 1, 1, destfile) != 1)
             }
 
-
             /* Clean up */
+            fclose(destfile);
+            destfile = NULL;
             munmap(map0, src0size);
             map0 = NULL;
             munmap(map1, src1size);
             map1 = NULL;
+skiptonextcleanupfds:
             close(src0fd);
             src0fd = 0;
             close(src1fd);
             src1fd = 0;
-            fclose(destfile);
-            destfile = NULL;
 
             /* Check whether or not we should go to the next region */
             if(OPT_R)
