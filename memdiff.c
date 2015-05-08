@@ -298,13 +298,13 @@ int main(int argc, char * argv[])
             {
                 snprintf(src0rw, NAMELEN, "%s%d%s%d%s%d", "/pid", pid, "_snap", cursnap, "_seg", region);
                 snprintf(src1rw, NAMELEN, "%s%d%s%d%s%d", "/pid", pid, "_snap", cursnap + 1, "_seg", region);
-                snprintf(destrw, NAMELEN, "%s%d%s%d%s%d%s%d", "/diff:pid", pid, "_snap", cursnap, "_snap", cursnap + 1 , "_seg", region);
+                snprintf(destrw, NAMELEN, "%s%d%s%d%s%d%s%d%s", "/pid", pid, "_snap", cursnap, "_snap", cursnap + 1 , "_seg", region, ".memdiff");
             }
             else
             {
                 snprintf(src0rw, NAMELEN, "%s%d%s%d%s%d", "/pid", pid, "_snap", cursnap, "_seg", curregion);
                 snprintf(src1rw, NAMELEN, "%s%d%s%d%s%d", "/pid", pid, "_snap", cursnap + 1, "_seg", curregion);
-                snprintf(destrw, NAMELEN, "%s%d%s%d%s%d%s%d", "/diff:pid", pid, "_snap", cursnap, "_snap", cursnap + 1 , "_seg", curregion);
+                snprintf(destrw, NAMELEN, "%s%d%s%d%s%d%s%d%s", "/pid", pid, "_snap", cursnap, "_snap", cursnap + 1 , "_seg", curregion, ".memdiff");
             }
 
             /* Open and check for errors */
